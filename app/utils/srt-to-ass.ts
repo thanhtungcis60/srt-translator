@@ -1,7 +1,14 @@
-function formatTime(t: string) {
-  // 00:00:00,090 → 0:00:00.09
-  const [h, m, s] = t.replace(",", ".").split(":");
-  return `${parseInt(h)}:${m}:${parseFloat(s).toFixed(2)}`;
+function formatTime(t?: string) {
+  if (!t) return "0:00:00.00"; // 🔥 tránh crash
+
+  const safe = t.replace(",", ".");
+
+  const parts = safe.split(":");
+  if (parts.length !== 3) return "0:00:00.00";
+
+  const [h, m, s] = parts;
+
+  return `${parseInt(h || "0")}:${m}:${parseFloat(s).toFixed(2)}`;
 }
 
 export function srtToAss(srt: string) {
@@ -25,19 +32,24 @@ Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
 
   for (const block of blocks) {
     const lines = block.split("\n");
-    if (lines.length < 4) continue;
 
-    const [startRaw, endRaw] = lines[1].split(" --> ");
+    if (lines.length < 2) continue; // 🔥 fix
+
+    const timeLine = lines[1];
+    if (!timeLine?.includes("-->")) continue;
+
+    const [startRaw, endRaw] = timeLine.split(" --> ");
 
     const start = formatTime(startRaw);
     const end = formatTime(endRaw);
 
-    const en = lines[2]?.trim();
-    const vi = lines[3]?.trim();
+    const en = lines[2]?.trim() || "";
+    const vi = lines[3]?.trim() || "";
 
-    result += `Dialogue: 0,${start},${end},EN,,0,0,0,,${en}\n`;
-    result += `Dialogue: 0,${start},${end},VI,,0,0,0,,${vi}\n`;
-  }
+    if (!en && !vi) continue;
+
+    result += `Dialogue: 0,${start},${end},EN,,0,0,0,,${en}\\N{\\c&H00FFFF&}${vi}\n`;
+   }
 
   return result;
 }
