@@ -1,46 +1,62 @@
-import { NextRequest, NextResponse } from "next/server";
+import { runWithConcurrency } from "@/app/utils";
+import { translateChunk } from "@/app/utils/translate";
 
-const API_KEY = process.env.GEMINI_API_KEY!;
-const URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
+export async function POST(req: Request) {
+  console.log("route.ts: 🔥 API HIT");
+  const { chunks } = await req.json();
 
-export async function POST(req: NextRequest) {
-  const { text } = await req.json();
-
-  const body = {
-    contents: [
-      {
-        parts: [
-          {
-            text: `
-Translate SRT EN→VI
-Keep format EXACT
-Bilingual (EN + VI)
-Return ONLY SRT
-
-${text}
-`
-          }
-        ]
+  // 🚀 chạy queue
+  const results = await runWithConcurrency(
+    chunks,
+    async (chunk:string, i) => {
+      try {
+        const text = await translateChunk(chunk);
+        return { success: true, text, index: i };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } catch (err: any) {
+        console.error("Chunk error:", {
+          index: i,
+          error: err.message,
+          chunk: chunk.slice(0, 200), // chỉ log 200 ký tự đầu
+        });
+        return { error: true, chunk, index: i };
       }
-    ]
-  };
+    },
+    1, // concurrency
+    1200, // delay
+  );
 
-  try {
-    const res = await fetch(URL, {
-      method: "POST",
-      body: JSON.stringify(body),
-      headers: { "Content-Type": "application/json" }
+  // 🔥 retry failed
+  const failed = results.filter((r) => r?.error);
+
+  if (failed.length > 0) {
+    const retryResults = await runWithConcurrency(
+      failed,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (item: any) => {
+        try {
+          const text = await translateChunk(item.chunk);
+          return { success: true, text, index: item.index };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } catch (err: any) {
+           console.error("Chunk error:", {
+            index: item.index,
+            error: err.message,
+            chunk: item.chunk.slice(0, 200), // chỉ log 200 ký tự đầu
+          });
+          return { error: true, chunk: item.chunk, index: item.index };
+        }
+      },
+      1,
+      1500,
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    retryResults.forEach((r: any) => {
+      if (!r.error) {
+        results[r.index] = r;
+      }
     });
-
-   
-    const data = await res.json();
-    console.log('data: ',data);
-
-    const output =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-
-    return NextResponse.json({ result: output });
-  } catch (e) {
-    return NextResponse.json({ error: "fail" }, { status: 500 });
   }
+
+  return Response.json(results);
 }

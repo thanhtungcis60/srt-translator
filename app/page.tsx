@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Box,
   Button,
   Chip,
@@ -14,10 +12,11 @@ import {
   TableCell,
   TableHead,
   TableRow,
-  Typography,
+  Typography
 } from "@mui/material";
-import { splitSrt, srtToAss, translateChunks } from "./utils";
+import { useEffect, useState } from "react";
 import { FileLog } from "./model";
+import { splitSrt, srtToAss } from "./utils";
 
 export default function Home() {
   const [files, setFiles] = useState<File[]>([]);
@@ -52,39 +51,39 @@ export default function Home() {
 
   const processFile = async (file: File) => {
     updateLog(file.name, { status: "p", progress: 0 });
-
+    debugger;
     try {
       const text = await file.text();
       const chunks = splitSrt(text, 80);
 
       let final = "";
+      const res = await fetch("/api/translate", {
+        method: "POST",
+        body: JSON.stringify({ chunks }),
+      });
+      if (!res){
+        console.log("Empty response")
+        throw new Error("Empty response");
+      } 
+      console.log("Response: ", res);
 
-      for (let i = 0; i < chunks.length; i++) {
-        try {
-          const res = await fetch("/api/translate", {
-            method: "POST",
-            body: JSON.stringify({ text: chunks[i] }),
-          });
-
-          // 🔥 log raw response nếu cần
-          if (!res) throw new Error("Empty response");
-
-          const data = await res.json();
-
-          final += data.result + "\n\n";
-
-          updateLog(file.name, {
-            progress: Math.round(((i + 1) / chunks.length) * 100),
-          });
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } catch (err: any) {
-          throw new Error(err.message || "Gemini error");
+      const data = await res.json();
+       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data.forEach((r: any, i: number) => {
+        if (r.success) {
+          final += r.text + "\n\n";
+        } else {
+          console.log(`Chunk ${i}: ${r.message || "failed"}`);
+          throw new Error(`Chunk ${i}: ${r.message || "failed"}`);
         }
 
-        await new Promise((r) => setTimeout(r, 2000)); // tránh rate limit
-      }
+        updateLog(file.name, {
+          progress: Math.round(((i + 1) / data.length) * 100),
+        });
+      });
 
       if (!final.includes("-->")) {
+        console.log("Invalid SRT format from Gemini");
         throw new Error("Invalid SRT format from Gemini");
       }
 
