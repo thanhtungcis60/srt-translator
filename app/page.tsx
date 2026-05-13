@@ -16,7 +16,7 @@ import {
 } from "@mui/material";
 import { useEffect, useState } from "react";
 import { FileLog } from "./model";
-import { splitSrt, srtToAss } from "./utils";
+import { splitSrt, srtToAss, srtToAssSingle } from "./utils";
 
 export default function Home() {
   const [files, setFiles] = useState<File[]>([]);
@@ -124,6 +124,29 @@ export default function Home() {
     setLoading(false);
   };
 
+  const handleConvertToAss= async () => {
+    setLoading(true);
+    for (const file of files) {
+      try{
+        const text = await file.text();
+        const ass = srtToAssSingle(text);
+        downloadFile(ass, file.name);
+        updateLog(file.name, {
+          status: "s",
+          progress: 100,
+          message: "OK",
+        });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } catch (err: any) {
+        updateLog(file.name, {
+          status: "e",
+          message: err.message,
+        });
+      }
+    }
+    setLoading(false);
+  };
+
   return (
     <Container>
       <Typography variant="h4" sx={{ mt: 2, mb: 2 }}>
@@ -165,8 +188,11 @@ export default function Home() {
 
         {files.length > 0 && <Typography sx={{ mt: 2 }}>Đã chọn {files.length} file</Typography>}
       </Box>
-      <Button variant="contained" disabled={loading || files.length === 0} onClick={handleTranslateAll} sx={{ mt: 2 }}>
-        {loading ? <CircularProgress size={20} color="inherit" /> : "Process script file"}
+      <Button variant="contained" color="primary" disabled={loading || files.length === 0} onClick={handleTranslateAll} sx={{ mt: 2, mr: 2 }}>
+        {loading ? <CircularProgress size={20} color="inherit" /> : "Translate script file"}
+      </Button>
+      <Button variant="contained" color="success" disabled={loading || files.length === 0} onClick={handleConvertToAss} sx={{ mt: 2 }}>
+        {loading ? <CircularProgress size={20} color="inherit" /> : "SRT --> ASS"}
       </Button>
 
       {mounted && (
