@@ -17,6 +17,7 @@ import {
 import { useEffect, useState } from "react";
 import { FileLog } from "./model";
 import { splitSrt, srtToAss, srtToAssSingle } from "./utils";
+import ReformatSRT from "./utils/reformat-srt";
 
 export default function Home() {
   const [files, setFiles] = useState<File[]>([]);
@@ -115,6 +116,17 @@ export default function Home() {
 
     a.click();
   }
+  function downloadFileSRT(content: string, filename: string) {
+    const blob = new Blob([content]);
+
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+
+    const name = filename.replace(/\.[^/.]+$/, "");
+    a.download = `${name}_formatted.srt`;
+
+    a.click();
+  }
 
   const handleTranslateAll = async () => {
     setLoading(true);
@@ -131,6 +143,29 @@ export default function Home() {
         const text = await file.text();
         const ass = srtToAssSingle(text);
         downloadFile(ass, file.name);
+        updateLog(file.name, {
+          status: "s",
+          progress: 100,
+          message: "OK",
+        });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } catch (err: any) {
+        updateLog(file.name, {
+          status: "e",
+          message: err.message,
+        });
+      }
+    }
+    setLoading(false);
+  };
+  
+  const handleReformatSrt= async () => {
+    setLoading(true);
+    for (const file of files) {
+      try{
+        const text = await file.text();
+        const srt = ReformatSRT(text);
+        downloadFileSRT(srt, file.name);
         updateLog(file.name, {
           status: "s",
           progress: 100,
@@ -191,8 +226,11 @@ export default function Home() {
       <Button variant="contained" color="primary" disabled={loading || files.length === 0} onClick={handleTranslateAll} sx={{ mt: 2, mr: 2 }}>
         {loading ? <CircularProgress size={20} color="inherit" /> : "Translate script file"}
       </Button>
-      <Button variant="contained" color="success" disabled={loading || files.length === 0} onClick={handleConvertToAss} sx={{ mt: 2 }}>
+      <Button variant="contained" color="success" disabled={loading || files.length === 0} onClick={handleConvertToAss} sx={{ mt: 2, mr: 2  }}>
         {loading ? <CircularProgress size={20} color="inherit" /> : "SRT --> ASS"}
+      </Button>
+      <Button variant="contained" color="secondary" disabled={loading || files.length === 0} onClick={handleReformatSrt} sx={{ mt: 2 }}>
+        {loading ? <CircularProgress size={20} color="inherit" /> : "Reformat SRT file"}
       </Button>
 
       {mounted && (
